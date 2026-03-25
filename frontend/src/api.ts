@@ -295,6 +295,28 @@ export async function patchProfile(data: Record<string, unknown>) {
   });
 }
 
+// Lightweight wake-up for Render sleepy instances (no auth required server-side).
+export async function pingHealth() {
+  return fetchApi<{ ok: boolean }>("/health");
+}
+
+// ── Experience slider persistence ─────────────────────────────────────────
+export async function getProfileSliders() {
+  return fetchApi<{ saved: boolean; sliders: Record<string, number> }>(
+    "/api/profile/sliders"
+  );
+}
+
+export async function putProfileSliders(sliders: Record<string, number>) {
+  return fetchApi<{ saved: boolean; sliders: Record<string, number> }>(
+    "/api/profile/sliders",
+    {
+      method: "PUT",
+      body: JSON.stringify({ sliders }),
+    }
+  );
+}
+
 // ── Saved Colleges ────────────────────────────────────────────────────────
 
 export interface SavedCollegeRow {

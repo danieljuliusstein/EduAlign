@@ -30,6 +30,6 @@ services:
   - type: cron
     name: edualign-keepalive
     runtime: node
-    schedule: '*/10 * * * *'
+    schedule: '*/5 * * * *'
     buildCommand: 'true'
-    startCommand: node -e "fetch('https://edualign-nymh.onrender.com/health').catch(()=>{})"
+    startCommand: node -e "const https=require('https'); const url='https://edualign-nymh.onrender.com/health'; const req=https.get(url,{timeout:5000},res=>{res.resume(); res.on('end',()=>process.exit(0));}); req.on('error',()=>process.exit(0)); req.on('timeout',()=>{req.destroy(); process.exit(0);});"

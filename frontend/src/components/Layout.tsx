@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
+import { pingHealth } from "../api";
 import { EduAlignLogo } from "./EduAlignLogo";
 import {
   Home, Crosshair, Wallet, GitCompareArrows, Star,
@@ -23,6 +24,11 @@ export function Layout() {
   const navigate = useNavigate();
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+
+  // Warm the backend so the first API call after Render inactivity feels faster.
+  useEffect(() => {
+    pingHealth().catch(() => {});
+  }, []);
 
   const handleLogout = () => {
     logout();

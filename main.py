@@ -164,6 +164,11 @@ class SaveProfileRequest(BaseModel):
     sliders: Optional[dict] = None
 
 
+class SliderSaveRequest(BaseModel):
+    # Experience sliders, keyed by UserProfile.SLIDER_KEYS (each 1-10).
+    sliders: dict[str, float]
+
+
 # ── Endpoints ────────────────────────────────────────────────────────────────
 
 
@@ -324,6 +329,42 @@ def api_save_profile(req: SaveProfileRequest, user: User = Depends(get_current_u
     return {"saved": True, **row.to_dict()}
 
 
+@app.get("/api/profile/sliders")
+def api_get_profile_sliders(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    row = db.query(UserProfile).filter(UserProfile.user_id == user.id).first()
+    if not row:
+        return {"saved": False}
+    return {"saved": True, "sliders": row.to_dict().get("sliders", {})}
+
+
+@app.put("/api/profile/sliders")
+def api_save_profile_sliders(
+    req: SliderSaveRequest,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    row = db.query(UserProfile).filter(UserProfile.user_id == user.id).first()
+    if not row:
+        row = UserProfile(user_id=user.id)
+        db.add(row)
+
+    # Clamp slider values to 1-10.
+    for key in UserProfile.SLIDER_KEYS:
+        if key not in req.sliders:
+            continue
+        try:
+            val = float(req.sliders[key])
+        except (TypeError, ValueError):
+            continue
+        val = max(1.0, min(10.0, val))
+        # UserProfile slider columns are Integer; store whole numbers.
+        setattr(row, key, int(round(val)))
+
+    db.commit()
+    db.refresh(row)
+    return {"saved": True, "sliders": row.to_dict().get("sliders", {})}
+
+
 # ── Saved Colleges ───────────────────────────────────────────────────────────
 
 
@@ -349,8 +390,11 @@ def api_get_saved_colleges(user: User = Depends(get_current_user), db: Session =
         if not col.empty:
             r = col.iloc[0]
             d["college_name"] = r.get("INSTNM", "Unknown")
-            d["city"] = r.get("CITY")
-            d["state"] = r.get("STABBR")
+            # Guard against pandas NaN so frontend doesn't render blank/invalid text.
+            city = r.get("CITY")
+            stabbr = r.get("STABBR")
+            d["city"] = None if pd.isna(city) else str(city)
+            d["state"] = None if pd.isna(stabbr) else str(stabbr)
             d["adm_rate"] = None if pd.isna(r.get("ADM_RATE")) else float(r["ADM_RATE"])
             d["grad_rate"] = None if pd.isna(r.get("C150_4")) else float(r["C150_4"])
             d["median_earnings"] = None if pd.isna(r.get("MD_EARN_WNE_P10")) else float(r["MD_EARN_WNE_P10"])
@@ -791,7 +835,9 @@ def api_home(
         if not col.empty:
             r = col.iloc[0]
             d["college_name"] = r.get("INSTNM", "Unknown")
-            d["state"] = r.get("STABBR")
+            # Ensure frontend receives either a real state abbrev string or null (not NaN).
+            stabbr = r.get("STABBR")
+            d["state"] = None if pd.isna(stabbr) else str(stabbr)
             d["adm_rate"] = None if pd.isna(r.get("ADM_RATE")) else float(r["ADM_RATE"])
         shortlist.append(d)
 

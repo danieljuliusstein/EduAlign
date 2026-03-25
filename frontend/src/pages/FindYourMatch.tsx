@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useEffect, useRef, useMemo } from "react";
 import { EXPERIENCE_DIMS, DIMENSION_LABELS } from "../constants";
 import type { Preferences, MatchItem, StudentProfile } from "../types";
-import { postMatch, postSuggestSliders } from "../api";
+import { getProfileSliders, putProfileSliders, postMatch, postSuggestSliders } from "../api";
 import { CollegeCard } from "../components/CollegeCard";
 import { useAuth } from "../contexts/AuthContext";
 import { Crosshair, Search, Brain, Sparkles, Zap, WandSparkles, Check } from "lucide-react";
@@ -93,6 +93,7 @@ export function FindYourMatch() {
     free_text: null,
   }));
   const [prefs, setPrefs] = useState<Preferences>(initialPrefs);
+  const [loadedPersistedSliders, setLoadedPersistedSliders] = useState(false);
   const [schoolSize, setSchoolSize] = useState<string | null>(() => {
     if (!user?.school_size) return null;
     const sizes = user.school_size.split(", ");
@@ -144,7 +145,7 @@ export function FindYourMatch() {
   }, [loading]);
 
   useEffect(() => {
-    if (step !== 1 || suggested) return;
+    if (step !== 1 || suggested || loadedPersistedSliders) return;
     const hasData = profile.gpa || profile.major || profile.extracurriculars || profile.free_text;
     if (!hasData) return;
 
@@ -160,7 +161,28 @@ export function FindYourMatch() {
         }
       } catch { /* keep current sliders */ }
     })();
-  }, [step, suggested, profile]);
+  }, [step, suggested, loadedPersistedSliders, profile]);
+
+  // Load persisted experience sliders for this user (so the radar/match stays consistent).
+  useEffect(() => {
+    if (!user?.id) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await getProfileSliders();
+        if (cancelled) return;
+        if (res.saved && res.sliders) {
+          setPrefs((prev) => ({ ...prev, ...res.sliders } as Preferences));
+          setLoadedPersistedSliders(true);
+        }
+      } catch {
+        // If the endpoint fails, keep defaults.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id]);
 
   const setProfileField = useCallback(<K extends keyof StudentProfile>(key: K, val: StudentProfile[K]) => {
     setProfile((p) => ({ ...p, [key]: val }));
@@ -197,6 +219,11 @@ export function FindYourMatch() {
       });
       setMatches(res.matches ?? []);
       setUsedFallback(res.used_fallback ?? false);
+
+      // Persist the slider preferences the user used for this match.
+      // This keeps the experience radar consistent across sessions.
+      putProfileSliders(prefs).catch(() => {});
+
       setStep(3);
       scrollToTop();
     } catch (e) {
@@ -210,6 +237,7 @@ export function FindYourMatch() {
     setStep(0);
     setProfile(emptyProfile);
     setPrefs(initialPrefs);
+    setLoadedPersistedSliders(false);
     setSchoolSize(null);
     setSelectedTags([]);
     setFreeText("");
