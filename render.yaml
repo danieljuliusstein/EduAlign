@@ -2,9 +2,16 @@ services:
   - type: web
     name: edualign
     runtime: python
+    # Use an always-on-ish configuration to avoid frequent 15-minute inactivity sleep.
+    # (On Render free plans, web services may still sleep regardless.)
+    plan: starter
     region: oregon
     branch: main
     buildCommand: bash build.sh
+    healthCheckPath: /health
+    scaling:
+      minInstances: 1
+      maxInstances: 1
     # Be resilient if PORT is unset/empty; Render's default expected port is 10000.
     startCommand: uvicorn main:app --host 0.0.0.0 --port ${PORT:-10000}
     envVars:
@@ -18,3 +25,11 @@ services:
         sync: false
       - key: JWT_SECRET
         generateValue: true
+
+  # Keep-alive ping to prevent Render from idling the web service too quickly.
+  - type: cron
+    name: edualign-keepalive
+    runtime: node
+    schedule: '*/10 * * * *'
+    buildCommand: 'true'
+    startCommand: node -e "fetch('https://edualign-nymh.onrender.com/health').catch(()=>{})"

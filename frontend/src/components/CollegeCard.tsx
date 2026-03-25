@@ -29,6 +29,7 @@ export function CollegeCard({ match, studentPrefs, rank }: Props) {
   const [saved, setSaved] = useState(false);
   const [reviewCount, setReviewCount] = useState<number>(0);
   const [avgRating, setAvgRating] = useState<number | null>(null);
+  const [isMobile, setIsMobile] = useState(false);
 
   useEffect(() => {
     if (match.UNITID) {
@@ -40,6 +41,21 @@ export function CollegeCard({ match, studentPrefs, rank }: Props) {
         .catch(() => {});
     }
   }, [match.UNITID]);
+
+  useEffect(() => {
+    const m = window.matchMedia("(max-width: 640px)");
+    const update = () => setIsMobile(m.matches);
+    update();
+    // Safari < 14 uses addListener/removeListener
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const anyM = m as any;
+    if (m.addEventListener) m.addEventListener("change", update);
+    else if (anyM.addListener) anyM.addListener(update);
+    return () => {
+      if (m.removeEventListener) m.removeEventListener("change", update);
+      else if (anyM.removeListener) anyM.removeListener(update);
+    };
+  }, []);
 
   const handleSave = async () => {
     if (!match.UNITID || saved) return;
@@ -194,8 +210,9 @@ export function CollegeCard({ match, studentPrefs, rank }: Props) {
         {hasProfile && (
           <div className="mc-radar-wrap">
             <RadarChart
-              height={280}
+              height={isMobile ? 240 : 280}
               labels={labels}
+              compact={isMobile}
               series={[
                 {
                   name: "Your Preferences",

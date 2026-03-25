@@ -63,6 +63,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Health endpoint for Render health checks / keep-alive pings.
+@app.get("/health")
+def health():
+    return {"ok": True}
+
 # Auth: signup, login, Google login
 app.include_router(auth_router)
 

@@ -548,3 +548,42 @@ section h2 {
   opacity: 0.5;
   z-index: 10;
 }
+
+/* ── Mobile layout tweaks ───────────────────────────────────────────────── */
+@media (max-width: 640px) {
+  .app-layout {
+    flex-direction: column;
+  }
+
+  .sidebar {
+    width: 100%;
+    padding: 0.75rem 0.75rem;
+  }
+
+  .sidebar-tagline {
+    display: none;
+  }
+
+  .sidebar-nav {
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+  }
+
+  .nav-link {
+    font-size: 0.85rem;
+    padding: 0.45rem 0.55rem;
+  }
+
+  .sidebar-profile {
+    margin-top: 0.75rem;
+  }
+
+  .main {
+    padding: 1rem 0.75rem;
+  }
+
+  .fixed-logo-br {
+    display: none;
+  }
+}
