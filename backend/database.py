@@ -12,15 +12,24 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-# Store DB in project root so it persists and is easy to find
+#
+# Store DB in project root so it persists and is easy to find.
+# Path.as_posix() uses forward slashes in the URL so SQLite works on Windows/macOS/Linux.
+#
 DB_DIR = Path(__file__).resolve().parent.parent
 DB_PATH = DB_DIR / "edualign.db"
-DATABASE_URL = os.getenv("DATABASE_URL", f"sqlite:///{DB_PATH}")
+DB_DIR.mkdir(parents=True, exist_ok=True)
+_default_url = f"sqlite:///{DB_PATH.as_posix()}"
+DATABASE_URL = os.getenv("DATABASE_URL", _default_url)
 
-engine = create_engine(
-    DATABASE_URL,
-    connect_args={"check_same_thread": False} if "sqlite" in DATABASE_URL else {},
-)
+_engine_kwargs = {}
+if "sqlite" in DATABASE_URL:
+    _engine_kwargs["connect_args"] = {"check_same_thread": False}
+else:
+    # Postgres (Neon, Supabase, etc.): recover from dropped connections on serverless hosts
+    _engine_kwargs["pool_pre_ping"] = True
+
+engine = create_engine(DATABASE_URL, **_engine_kwargs)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
@@ -45,6 +54,11 @@ def run_migrations():
     from sqlalchemy import text
 
     alter_statements = [
+        "ALTER TABLE users ADD COLUMN screening_complete BOOLEAN NOT NULL DEFAULT 0",
+        "ALTER TABLE users ADD COLUMN origin VARCHAR(32)",
+        "ALTER TABLE users ADD COLUMN gpa_scale VARCHAR(16)",
+        "ALTER TABLE users ADD COLUMN test_type VARCHAR(16)",
+        "ALTER TABLE users ADD COLUMN act INTEGER",
         "ALTER TABLE users ADD COLUMN is_admin BOOLEAN NOT NULL DEFAULT 0",
         "ALTER TABLE users ADD COLUMN gpa REAL",
         "ALTER TABLE users ADD COLUMN sat INTEGER",

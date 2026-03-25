@@ -1,6 +1,8 @@
 import { getStoredToken } from "./contexts/AuthContext";
 
-const API_BASE = "";
+/** Production API origin (e.g. https://api.example.com). Empty = same-origin or Vite dev proxy. */
+const _raw = import.meta.env.VITE_API_BASE_URL ?? "";
+const API_BASE = typeof _raw === "string" ? _raw.replace(/\/$/, "") : "";
 
 /** Extract a short, user-friendly message from FastAPI-style error JSON. */
 function parseErrorDetail(text: string): string | null {
