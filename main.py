@@ -26,6 +26,21 @@ def _clean(records: list[dict]) -> list[dict]:
                 rec[k] = None
     return records
 
+def _cors_allow_origins() -> list[str]:
+    """
+    CORS allow-list for browser origins.
+
+    Configure in production via `CORS_ORIGINS` (comma-separated).
+    Falls back to local dev origins when unset.
+    """
+    raw = os.getenv("CORS_ORIGINS", "").strip()
+    if raw:
+        return [o.strip() for o in raw.split(",") if o.strip()]
+    return [
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+    ]
+
 from backend.activity import log_activity
 from backend.auth import router as auth_router
 from backend.auth.routes import get_current_user, get_current_user_optional
@@ -43,7 +58,7 @@ app = FastAPI(title="EduAlign API", version="0.1.0")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173", "*"],
+    allow_origins=_cors_allow_origins(),
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -719,8 +734,39 @@ def api_recent_reviews(limit: int = 5, db: Session = Depends(get_db)):
 
 
 @app.get("/api/home")
-def api_home(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+def api_home(
+    user: Optional[User] = Depends(get_current_user_optional),
+    db: Session = Depends(get_db),
+):
     from sqlalchemy import func as sa_func
+
+    def _community_counts():
+        total_users = db.query(sa_func.count(User.id)).scalar() or 0
+        total_reviews = db.query(sa_func.count(Review.id)).scalar() or 0
+        colleges_reviewed = db.query(sa_func.count(sa_func.distinct(Review.unitid))).scalar() or 0
+        return {
+            "total_users": total_users,
+            "total_reviews": total_reviews,
+            "colleges_reviewed": colleges_reviewed,
+        }
+
+    # Logged-out users can still see community totals, but personal data is empty.
+    if user is None:
+        return {
+            "shortlist": [],
+            "activity": [],
+            "progress": {
+                "profile_complete": False,
+                "has_match": False,
+                "has_saved": False,
+                "has_plan": False,
+                "has_comparison": False,
+                "has_review": False,
+                "steps_done": 0,
+                "total_steps": 6,
+            },
+            "community": _community_counts(),
+        }
 
     saved = db.query(SavedCollege).filter(SavedCollege.user_id == user.id).order_by(SavedCollege.saved_at.desc()).limit(6).all()
     df = _get_colleges()
@@ -771,10 +817,6 @@ def api_home(user: User = Depends(get_current_user), db: Session = Depends(get_d
         has_review,
     ])
 
-    total_users = db.query(sa_func.count(User.id)).scalar() or 0
-    total_reviews = db.query(sa_func.count(Review.id)).scalar() or 0
-    colleges_reviewed = db.query(sa_func.count(sa_func.distinct(Review.unitid))).scalar() or 0
-
     return {
         "shortlist": shortlist,
         "activity": activity,
@@ -788,11 +830,7 @@ def api_home(user: User = Depends(get_current_user), db: Session = Depends(get_d
             "steps_done": steps_done,
             "total_steps": 6,
         },
-        "community": {
-            "total_users": total_users,
-            "total_reviews": total_reviews,
-            "colleges_reviewed": colleges_reviewed,
-        },
+        "community": _community_counts(),
     }
 
 
