@@ -69,8 +69,17 @@ app.include_router(auth_router)
 
 @app.on_event("startup")
 def startup():
+    # Keep startup fast/reliable for hosted environments.
+    # `build.sh` already runs `init_db()` and `run_migrations()` during deployment,
+    # so re-running migrations on every process start can delay port binding.
+    print("[startup] init_db()")
     init_db()
-    run_migrations()
+
+    if os.getenv("EDUALIGN_RUN_MIGRATIONS_ON_STARTUP", "0") == "1":
+        print("[startup] run_migrations()")
+        run_migrations()
+    else:
+        print("[startup] skip run_migrations() (set EDUALIGN_RUN_MIGRATIONS_ON_STARTUP=1 to enable)")
 
 _colleges_df = None
 
