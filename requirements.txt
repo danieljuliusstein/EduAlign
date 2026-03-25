@@ -5,6 +5,7 @@ fastapi
 uvicorn[standard]
 python-dotenv
 google-auth
+google-generativeai
 bcrypt>=4.0.1
 python-jose[cryptography]
 sqlalchemy
