@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { EXPERIENCE_DIMS, DIMENSION_LABELS } from "../constants";
-import { SvgRadar } from "./SvgRadar";
+import { RadarChart } from "./RadarChart";
 import { saveCollege, getReviewSummary } from "../api";
 import type { MatchItem, Preferences } from "../types";
 import { Heart, Star } from "lucide-react";
@@ -49,12 +49,47 @@ export function CollegeCard({ match, studentPrefs, rank }: Props) {
   const labels = EXPERIENCE_DIMS.map(
     (d) => SHORT_LABELS[DIMENSION_LABELS[d]] ?? DIMENSION_LABELS[d]
   );
-  const studentVals = EXPERIENCE_DIMS.map((d) => studentPrefs[d]);
-  const collegeVals = EXPERIENCE_DIMS.map(
-    (d) => (Number((match as Record<string, unknown>)[d]) || 0) * 10
-  );
+  // Keep both polygons on the same normalized 0-10 scale.
+  // - Student sliders are already 1-10 (importance / preference intensity).
+  // - Backend match dimensions are typically 0-1; scale to 0-10 for direct comparison.
+  const neutralVal = 5;
+  const clamp01to10 = (v: number) => Math.max(0, Math.min(10, v));
+  const normalizeCollegeDim = (raw: unknown) => {
+    const n = typeof raw === "number" ? raw : Number(raw);
+    if (!Number.isFinite(n)) return 0;
+    if (n <= 1.01) return clamp01to10(n * 10);
+    if (n <= 10.01) return clamp01to10(n);
+    return clamp01to10(n);
+  };
+
+  const studentVals = EXPERIENCE_DIMS.map((d) => {
+    const v = typeof studentPrefs?.[d] === "number" ? studentPrefs[d] : Number((studentPrefs as Record<string, unknown>)[d]);
+    // Sliders are 1-10; treat 0/invalid as "not rated" -> neutral.
+    if (!Number.isFinite(v) || v <= 0) return neutralVal;
+    return clamp01to10(v);
+  });
+
+  const collegeVals = EXPERIENCE_DIMS.map((d) => normalizeCollegeDim((match as Record<string, unknown>)[d]));
+
   const hasProfile = collegeVals.some((v) => v > 0);
   const scorePct = ((match.similarity_score ?? 0) * 100).toFixed(0);
+
+  const strengths = new Set(match.strengths ?? []);
+  const tradeoffs = new Set(match.tradeoffs ?? []);
+  const axisMarkerColors = EXPERIENCE_DIMS.map((d) => {
+    // Mirror the existing strength/tradeoff semantics from the colored pills:
+    // - Green for strengths (match)
+    // - Orange for tradeoffs (concern)
+    if (tradeoffs.has(d)) return "rgba(251,191,36,1)"; // amber/orange
+    if (strengths.has(d)) return "rgba(141,217,160,1)"; // matching green
+    return "rgba(168,184,216,0.95)"; // neutral
+  });
+
+  const hoverTexts = labels.map((_, i) => {
+    const studentV = studentVals[i] ?? neutralVal;
+    const collegeV = collegeVals[i] ?? 0;
+    return `Your Preferences: ${studentV.toFixed(1)}<br>College Ratings: ${collegeV.toFixed(1)}`;
+  });
 
   return (
     <div className="mc">
@@ -128,13 +163,27 @@ export function CollegeCard({ match, studentPrefs, rank }: Props) {
         {/* Radar */}
         {hasProfile && (
           <div className="mc-radar-wrap">
-            <SvgRadar
-              series={[
-                { values: studentVals, fill: "rgba(106,171,122,0.3)", stroke: "rgba(106,171,122,0.8)" },
-                { values: collegeVals, fill: "rgba(168,184,216,0.25)", stroke: "rgba(168,184,216,0.8)" },
-              ]}
+            <RadarChart
+              height={280}
               labels={labels}
-              size={280}
+              series={[
+                {
+                  name: "Your Preferences",
+                  values: studentVals,
+                  color: "rgba(106,171,122,0.6)",
+                  opacity: 1,
+                  markerColor: axisMarkerColors,
+                  hoverText: hoverTexts,
+                },
+                {
+                  name: "College Ratings",
+                  values: collegeVals,
+                  color: "rgba(168,184,216,0.6)",
+                  opacity: 1,
+                  markerColor: axisMarkerColors,
+                  hoverText: hoverTexts,
+                },
+              ]}
             />
           </div>
         )}

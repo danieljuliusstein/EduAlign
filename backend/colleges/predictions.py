@@ -11,7 +11,13 @@ import math
 import os
 import re
 
-import google.generativeai as genai
+try:
+    # New Gemini SDK (replacement for deprecated google-generativeai)
+    from google import genai
+    from google.genai import types
+except ImportError:  # pragma: no cover
+    genai = None
+    types = None
 import numpy as np
 import pandas as pd
 from dotenv import load_dotenv
@@ -19,9 +25,11 @@ from dotenv import load_dotenv
 from backend.colleges.preprocessing import EXPERIENCE_DIMS, load_merged_data
 
 load_dotenv()
-genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
-
-MODEL = genai.GenerativeModel("gemini-2.0-flash-lite")
+_GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+_GEMINI_MODEL = "gemini-2.0-flash-lite"
+_gemini_client = (
+    genai.Client(api_key=_GEMINI_API_KEY) if (genai is not None and _GEMINI_API_KEY) else None
+)
 
 # Rough GPA-to-SAT mapping (used when student provides GPA but no SAT)
 _GPA_TO_SAT = [
@@ -307,9 +315,13 @@ def predict_with_narrative(profile: dict, predictions: list[dict]) -> list[dict]
     )
 
     try:
-        response = MODEL.generate_content(
-            _NARRATIVE_PROMPT + "\n\n" + prompt,
-            generation_config=genai.GenerationConfig(
+        if _gemini_client is None or types is None:
+            raise RuntimeError("Gemini SDK unavailable or GEMINI_API_KEY not configured")
+
+        response = _gemini_client.models.generate_content(
+            model=_GEMINI_MODEL,
+            contents=_NARRATIVE_PROMPT + "\n\n" + prompt,
+            config=types.GenerateContentConfig(
                 response_mime_type="application/json",
                 temperature=0.4,
             ),

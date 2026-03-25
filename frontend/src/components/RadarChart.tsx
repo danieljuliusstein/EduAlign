@@ -8,6 +8,8 @@ interface RadarSeries {
   values: number[];
   color?: string;
   opacity?: number;
+  markerColor?: string[];
+  hoverText?: string[];
 }
 
 interface RadarChartProps {
@@ -51,6 +53,12 @@ export function RadarChart({
     () =>
       series.map((s, i) => {
         const valsClosed = [...s.values, s.values[0]];
+        const markerClosed = s.markerColor
+          ? [...s.markerColor, s.markerColor[0] ?? s.markerColor[s.markerColor.length - 1]!]
+          : undefined;
+        const hoverTextClosed = s.hoverText
+          ? [...s.hoverText, s.hoverText[0] ?? s.hoverText[s.hoverText.length - 1]!]
+          : undefined;
         return {
           type: "scatterpolar" as const,
           r: valsClosed,
@@ -65,7 +73,14 @@ export function RadarChart({
               : COLORS[i % COLORS.length]!.replace(/[\d.]+\)$/, "1)"),
             width: compact ? 1.5 : 2,
           },
-          marker: { size: compact ? 3 : 5 },
+          text: hoverTextClosed,
+          hovertemplate: hoverTextClosed
+            ? "%{theta}<br>%{text}<extra></extra>"
+            : undefined,
+          marker: {
+            size: compact ? 3 : 5,
+            color: markerClosed,
+          },
         };
       }),
     [series, labelsClosed, compact]
@@ -88,13 +103,15 @@ export function RadarChart({
           linecolor: compact ? "rgba(255,255,255,0.1)" : "#d1d5db",
         },
       },
+      hovermode: "closest" as const,
       showlegend: !compact,
       legend: compact ? undefined : {
-        font: { size: 11, color: "#6b7280" },
-        orientation: "h" as const,
-        y: -0.15,
-        x: 0.5,
-        xanchor: "center" as const,
+        font: { size: 11, color: "#9ca3af" },
+        orientation: "v" as const,
+        x: 0.98,
+        y: 0.98,
+        xanchor: "right" as const,
+        yanchor: "top" as const,
       },
       margin: effectiveMargin,
       height,
