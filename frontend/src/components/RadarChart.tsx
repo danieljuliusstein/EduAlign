@@ -34,20 +34,32 @@ const defaultLabels = EXPERIENCE_DIMS.map(
     })[d as ExperienceDim]
 );
 
-const COLORS = ["rgba(106,171,122,0.7)", "rgba(168,184,216,0.7)"];
+// Series colours: preferences (green), college (blue-grey), match zone (teal highlight)
+const COLORS = [
+  "rgba(106,171,122,0.55)",
+  "rgba(168,184,216,0.50)",
+  "rgba(72,200,168,0.35)",
+];
+
+const LINE_COLORS = [
+  "rgba(106,171,122,0.9)",
+  "rgba(168,184,216,0.75)",
+  "rgba(72,200,168,0.85)",
+];
 
 export function RadarChart({
   series,
   labels = defaultLabels,
-  height = 400,
+  height = 320,
   compact = false,
   margin,
 }: RadarChartProps) {
   const labelsClosed = useMemo(() => [...labels, labels[0]], [labels]);
 
+  // Extra bottom space for the horizontal legend
   const effectiveMargin = margin ?? (compact
-    ? { l: 45, r: 45, t: 25, b: 25 }
-    : { l: 40, r: 40, t: 40, b: 40 });
+    ? { l: 42, r: 42, t: 18, b: 18 }
+    : { l: 52, r: 52, t: 28, b: 52 });
 
   const data = useMemo(
     () =>
@@ -59,28 +71,41 @@ export function RadarChart({
         const hoverTextClosed = s.hoverText
           ? [...s.hoverText, s.hoverText[0] ?? s.hoverText[s.hoverText.length - 1]!]
           : undefined;
+
+        const fillColor = s.color ?? COLORS[i % COLORS.length];
+        const lineColor = s.color
+          ? s.color.replace(/[\d.]+\)$/, "0.9)")
+          : LINE_COLORS[i % LINE_COLORS.length];
+
+        // Match zone (index 2) gets no markers and a dashed line to keep it subtle
+        const isMatchZone = i === 2;
+
         return {
           type: "scatterpolar" as const,
           r: valsClosed,
           theta: labelsClosed,
           fill: "toself" as const,
           name: s.name,
-          opacity: s.opacity ?? 0.6,
-          fillcolor: s.color ?? COLORS[i % COLORS.length],
+          opacity: s.opacity ?? (isMatchZone ? 0.85 : 0.75),
+          fillcolor: fillColor,
           line: {
-            color: s.color
-              ? s.color.replace(/[\d.]+\)$/, "1)")
-              : COLORS[i % COLORS.length]!.replace(/[\d.]+\)$/, "1)"),
-            width: compact ? 1.5 : 2,
+            color: lineColor,
+            width: isMatchZone ? 1.5 : compact ? 1.5 : 2,
+            dash: isMatchZone ? ("dot" as const) : ("solid" as const),
           },
+          // Match zone: no markers; others: small coloured dots
+          mode: isMatchZone ? ("lines" as const) : ("lines+markers" as const),
           text: hoverTextClosed,
           hovertemplate: hoverTextClosed
             ? "%{theta}<br>%{text}<extra></extra>"
             : undefined,
-          marker: {
-            size: compact ? 3 : 5,
-            color: markerClosed,
-          },
+          marker: isMatchZone
+            ? { size: 0 }
+            : {
+                size: compact ? 4 : 6,
+                color: markerClosed,
+                line: { color: "rgba(255,255,255,0.3)", width: 1 },
+              },
         };
       }),
     [series, labelsClosed, compact]
@@ -93,26 +118,46 @@ export function RadarChart({
         radialaxis: {
           visible: true,
           range: [0, 10],
-          tickfont: { size: compact ? 8 : 10, color: compact ? "rgba(255,255,255,0.4)" : "#9ca3af" },
-          gridcolor: compact ? "rgba(255,255,255,0.08)" : "#e5e7eb",
+          // Hide tick numbers — values are communicated through hover only
+          showticklabels: false,
+          ticks: "",
+          gridcolor: "rgba(255,255,255,0.10)",
+          gridwidth: 1,
           linecolor: "transparent",
+          // Keep 5 rings for visual reference without numbers
+          dtick: 2,
         },
         angularaxis: {
-          tickfont: { size: compact ? 8 : 11, color: compact ? "rgba(255,255,255,0.65)" : "#6b7280" },
-          gridcolor: compact ? "rgba(255,255,255,0.08)" : "#e5e7eb",
-          linecolor: compact ? "rgba(255,255,255,0.1)" : "#d1d5db",
+          tickfont: {
+            size: compact ? 9 : 11,
+            color: "rgba(200,210,230,0.80)",
+            family: "DM Sans, system-ui, sans-serif",
+          },
+          gridcolor: "rgba(255,255,255,0.08)",
+          linecolor: "rgba(255,255,255,0.12)",
         },
       },
       hovermode: "closest" as const,
       showlegend: !compact,
-      legend: compact ? undefined : {
-        font: { size: 11, color: "#9ca3af" },
-        orientation: "v" as const,
-        x: 0.98,
-        y: 0.98,
-        xanchor: "right" as const,
-        yanchor: "top" as const,
-      },
+      legend: compact
+        ? undefined
+        : {
+            font: {
+              size: 11,
+              color: "rgba(200,210,230,0.75)",
+              family: "DM Sans, system-ui, sans-serif",
+            },
+            orientation: "h" as const,
+            // Centred below the chart — never overlaps the polygon
+            x: 0.5,
+            y: -0.08,
+            xanchor: "center" as const,
+            yanchor: "top" as const,
+            bgcolor: "transparent",
+            borderwidth: 0,
+            // Compact symbol so the row stays tidy
+            itemsizing: "constant" as const,
+          },
       margin: effectiveMargin,
       height,
       autosize: true,
