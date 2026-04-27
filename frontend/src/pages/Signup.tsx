@@ -50,7 +50,7 @@ export function Signup() {
           <EduAlignLogo height={72} />
         </div>
         <p className="auth-tagline" style={{ textAlign: "center", marginBottom: "0.5rem" }}>
-          "Where Students Meet Their Perfect Fit."
+          A full-stack web app that helps you find colleges based on the kind of experience you actually want, not just your stats.
         </p>
         <p className="auth-welcome">Welcome to EduAlign</p>
         <form className="auth-form" onSubmit={handleSubmit}>

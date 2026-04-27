@@ -1,6 +1,6 @@
 # EduAlign React Frontend
 
-React (Vite + TypeScript) frontend for EduAlign. Replaces the Streamlit app with a modern SPA that talks to the FastAPI backend.
+React (Vite + TypeScript) SPA for **EduAlign — AI Powered College Matcher**: a multi-step experience-first college match flow, dashboards, reviews, financial planning, and compare tools — all talking to the FastAPI backend.
 
 ## Features
 

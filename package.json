@@ -1,7 +1,7 @@
 {
   "name": "edualign",
   "private": true,
-  "description": "EduAlign — Find colleges that match your experience",
+  "description": "EduAlign — AI Powered College Matcher",
   "scripts": {
     "frontend:install": "cd frontend && npm install",
     "frontend:dev": "cd frontend && npm run dev",

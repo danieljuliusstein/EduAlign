@@ -95,7 +95,9 @@ export function Login() {
         <div className="auth-split">
           <div className="auth-brand-column">
             <EduAlignLogo height={80} />
-            <p className="auth-tagline">"Where Students Meet Their Perfect Fit."</p>
+            <p className="auth-tagline">
+              A full-stack web app that helps you find colleges based on the kind of experience you actually want, not just your stats.
+            </p>
           </div>
           <div className="auth-form-column">
             <EduAlignLogo height={44} />

@@ -56,7 +56,7 @@ export function Layout() {
           <EduAlignLogo height={36} dark />
         </div>
         <p className="sidebar-tagline">
-          Find colleges that match your experience, not just your stats.
+          Find colleges based on the experience you want — not just the numbers on your application.
         </p>
         <nav className="sidebar-nav">
           {nav.map(({ to, label, icon }) => (

@@ -53,7 +53,7 @@ const VIBE_TAGS = [
 
 const SCHOOL_SIZES = ["Small (<5k)", "Medium (5k–15k)", "Large (15k+)"];
 
-const STEP_LABELS = ["About You", "Preferences", "Your Vibe"];
+const STEP_LABELS = ["Basics", "Experience", "Vibe"];
 
 const LOADING_STAGES = [
   { text: "Analyzing your preferences", icon: <Crosshair size={28} /> },
@@ -297,9 +297,9 @@ export function FindYourMatch() {
 
   const renderStep0 = () => (
     <div className="wiz-step-enter" key="step0">
-      <h1 className="wiz-h1">Tell us about yourself</h1>
+      <h1 className="wiz-h1">The basics</h1>
       <p className="wiz-sub">
-        We'll use this to personalize your matches and auto-tune your experience preferences.
+        GPA, SAT, major, location, extracurriculars, school size, and tuition preferences — we use this to personalize matches and pre-fill your experience sliders (you can change anything later).
       </p>
 
       <div className="wiz-form-grid">
@@ -392,7 +392,7 @@ export function FindYourMatch() {
       <div className="wiz-btn-row">
         <div />
         <button type="button" className="wiz-btn wiz-btn-primary" onClick={goNext}>
-          Next: Preferences →
+          Next: Experience →
         </button>
       </div>
     </div>
@@ -400,17 +400,16 @@ export function FindYourMatch() {
 
   const renderStep1 = () => (
     <div className="wiz-step-enter" key="step1">
-      <h1 className="wiz-h1">Experience Preferences</h1>
+      <h1 className="wiz-h1">Experience fit</h1>
       <p className="wiz-sub">
-        Rate how important each dimension is to your ideal college experience.
+        Rate how each dimension matters to you — academic intensity, social life, mental health culture, collaboration vs competition, and more. Sliders start from your profile; you stay in full control.
       </p>
 
       {suggested && (
         <div className="wiz-suggest">
           <span className="wiz-suggest-icon"><WandSparkles size={18} /></span>
           <span className="wiz-suggest-text">
-            <strong>Auto-tuned!</strong> Sliders were adjusted based on your profile.
-            Feel free to fine-tune them.
+            <strong>Auto-filled from your profile.</strong> Tweak anything — the goal is a smart starting point, not a black box.
           </span>
         </div>
       )}
@@ -422,7 +421,7 @@ export function FindYourMatch() {
           ← Back
         </button>
         <button type="button" className="wiz-btn wiz-btn-primary" onClick={goNext}>
-          Next: Your Vibe →
+          Next: Vibe →
         </button>
       </div>
     </div>
@@ -430,9 +429,9 @@ export function FindYourMatch() {
 
   const renderStep2 = () => (
     <div className="wiz-step-enter" key="step2">
-      <h1 className="wiz-h1">Describe Your Vibe</h1>
+      <h1 className="wiz-h1">Your vibe</h1>
       <p className="wiz-sub">
-        Select tags that resonate and add anything else — this helps our AI match you to the right campus culture.
+        Pick tags that feel like you (entrepreneurial, creative, study abroad, …) and add anything more specific. This shapes how we match campus culture, not just scores on paper.
       </p>
 
       <div className="wiz-section-title">Quick Tags</div>
@@ -539,7 +538,7 @@ export function FindYourMatch() {
           Your Top {matches.length} Matches
         </h2>
         <p className="wiz-results-sub">
-          Colleges aligned with your experience preferences, not just your stats.
+          Top matches with scores and visual breakdowns — see where your preferences line up with each school, not just a ranked list.
         </p>
       </div>
 
