@@ -1,0 +1,38 @@
+name: Keepalive ping
+
+# Keep the Render free-tier backend warm by pinging /health every ~14 minutes.
+# This is independent from Cloudflare Pages (frontend) — it only hits the API.
+
+on:
+  schedule:
+    - cron: "*/14 * * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: keepalive
+  cancel-in-progress: false
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Ping /health on Render
+        env:
+          # Override by setting a repo Variable named KEEPALIVE_URL
+          # (Settings -> Secrets and variables -> Actions -> Variables).
+          KEEPALIVE_URL: ${{ vars.KEEPALIVE_URL || 'https://edualign-nymh.onrender.com/health' }}
+        run: |
+          set -euo pipefail
+          for i in 1 2 3; do
+            code=$(curl -sS -o /tmp/body -w "%{http_code}" --max-time 30 "$KEEPALIVE_URL" || echo "000")
+            echo "attempt $i -> HTTP $code"
+            cat /tmp/body || true
+            echo
+            if [ "$code" = "200" ]; then
+              exit 0
+            fi
+            sleep 15
+          done
+          echo "Keepalive failed after 3 attempts" >&2
+          exit 1
