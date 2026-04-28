@@ -81,22 +81,15 @@ export async function postLogin(username: string, password: string) {
   });
 }
 
-export async function postSignup(username: string, password: string) {
+export async function postSignup(username: string, password: string, email?: string) {
   return fetchApi<TokenResponse>("/api/auth/signup", {
     method: "POST",
-    body: JSON.stringify({ username, password }),
+    body: JSON.stringify({ username, password, email: email || null }),
   });
 }
 
 export async function postGoogleLogin(idToken: string) {
   return fetchApi<TokenResponse>("/api/auth/google", {
-    method: "POST",
-    body: JSON.stringify({ id_token: idToken }),
-  });
-}
-
-export async function postAppleLogin(idToken: string) {
-  return fetchApi<TokenResponse>("/api/auth/apple", {
     method: "POST",
     body: JSON.stringify({ id_token: idToken }),
   });

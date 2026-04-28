@@ -34,7 +34,7 @@ export function Signup() {
     }
     setLoading(true);
     try {
-      await postSignup(username.trim(), password);
+      await postSignup(username.trim(), password, email.trim().toLowerCase());
       setSuccess(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Sign up failed");
