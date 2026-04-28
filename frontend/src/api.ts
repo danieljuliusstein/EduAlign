@@ -81,6 +81,21 @@ export async function postLogin(username: string, password: string) {
   });
 }
 
+export async function postForgotPassword(
+  identifier: string,
+  email: string,
+  newPassword: string
+) {
+  return fetchApi<{ ok: boolean }>("/api/auth/forgot-password", {
+    method: "POST",
+    body: JSON.stringify({
+      identifier,
+      email,
+      new_password: newPassword,
+    }),
+  });
+}
+
 export async function postSignup(username: string, password: string, email?: string) {
   return fetchApi<TokenResponse>("/api/auth/signup", {
     method: "POST",

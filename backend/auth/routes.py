@@ -40,6 +40,12 @@ class LoginRequest(BaseModel):
     password: str
 
 
+class ForgotPasswordRequest(BaseModel):
+    identifier: str = Field(..., min_length=1, description="Username or email")
+    email: str = Field(..., min_length=3, description="Email used to verify account ownership")
+    new_password: str = Field(..., min_length=1)
+
+
 class GoogleLoginRequest(BaseModel):
     id_token: str = Field(..., description="Google OAuth2 ID token from frontend")
 
@@ -140,6 +146,33 @@ def login(req: LoginRequest, db: Session = Depends(get_db)):
     log_activity(db, user.id, "login")
     token = create_access_token(data={"sub": str(user.id), "username": user.username})
     return TokenResponse(access_token=token, user=user.to_dict())
+
+
+@router.post("/forgot-password")
+def forgot_password(req: ForgotPasswordRequest, db: Session = Depends(get_db)):
+    """Reset password by verifying username/email + account email."""
+    identifier = req.identifier.strip()
+    verify_email = req.email.strip().lower()
+    user = get_user_by_username(db, identifier)
+    if not user:
+        user = get_user_by_email(db, identifier.lower())
+
+    if not user:
+        raise HTTPException(status_code=400, detail="Unable to reset password with the provided details.")
+
+    stored_email = (user.email or "").strip().lower()
+    if not stored_email or stored_email != verify_email:
+        raise HTTPException(status_code=400, detail="Unable to reset password with the provided details.")
+
+    ok, msg = is_valid_password(req.new_password)
+    if not ok:
+        raise HTTPException(status_code=400, detail=msg)
+
+    user.password_hash = hash_password(req.new_password)
+    db.commit()
+    db.refresh(user)
+    log_activity(db, user.id, "password_reset")
+    return {"ok": True}
 
 
 @router.post("/google", response_model=TokenResponse)

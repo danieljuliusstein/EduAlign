@@ -1,25 +1,20 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { EduAlignLogo } from "../components/EduAlignLogo";
 import { postSignup } from "../api";
+import { useAuth } from "../contexts/AuthContext";
+import { validatePasswordComplexity } from "../utils/passwordValidation";
 import "../auth.css";
 
 export function Signup() {
   const navigate = useNavigate();
+  const { setAuth } = useAuth();
   const [email, setEmail] = useState("");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState("");
-  const [success, setSuccess] = useState(false);
   const [loading, setLoading] = useState(false);
-
-  useEffect(() => {
-    if (success) {
-      const timer = setTimeout(() => navigate("/login", { replace: true }), 2000);
-      return () => clearTimeout(timer);
-    }
-  }, [success, navigate]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -28,14 +23,16 @@ export function Signup() {
       setError("Passwords do not match.");
       return;
     }
-    if (password.length < 8) {
-      setError("Password must be at least 8 characters.");
+    const passwordError = validatePasswordComplexity(password);
+    if (passwordError) {
+      setError(passwordError);
       return;
     }
     setLoading(true);
     try {
-      await postSignup(username.trim(), password, email.trim().toLowerCase());
-      setSuccess(true);
+      const res = await postSignup(username.trim(), password, email.trim().toLowerCase());
+      setAuth(res.access_token, res.user);
+      navigate("/", { replace: true });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Sign up failed");
     } finally {
@@ -101,16 +98,11 @@ export function Signup() {
               required
             />
           </div>
-          {success && (
-            <p className="auth-success" style={{ color: "#15803d", background: "#f0fdf4", padding: "0.75rem 1rem", borderRadius: 8, textAlign: "center" }}>
-              Account created successfully! Please sign in.
-            </p>
-          )}
           {error && <p className="auth-error">{error}</p>}
           <button
             type="submit"
             className="auth-btn-primary"
-            disabled={loading || success}
+            disabled={loading}
           >
             Continue
           </button>

@@ -20,7 +20,7 @@ EduAlign’s backend is organized by **feature** so you can find and change code
 | **`google_oauth.py`** | Verify Google ID tokens for “Sign in with Google”. |
 | **`validation.py`** | Username format validation. |
 | **`user_queries.py`** | DB lookups: by username, email, Google ID, or user id. |
-| **`routes.py`** | FastAPI routes: `/api/auth/signup`, `/api/auth/login`, `/api/auth/google`, `/api/auth/me`, plus `get_current_user` dependency. |
+| **`routes.py`** | FastAPI routes: `/api/auth/signup`, `/api/auth/login`, `/api/auth/forgot-password`, `/api/auth/google`, `/api/auth/me`, plus `get_current_user` dependency. |
 
 Auth env: `JWT_SECRET`, `GOOGLE_CLIENT_ID` (Google OAuth).
 
