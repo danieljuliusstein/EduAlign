@@ -1,5 +1,11 @@
-import { Routes, Route, Navigate } from "react-router-dom";
+import { useEffect } from "react";
+import { Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { AuthProvider } from "./contexts/AuthContext";
+import {
+  absorbUtmsFromCurrentUrl,
+  trackLandingOnce,
+  trackPageView,
+} from "./utils/analytics";
 import { Layout } from "./components/Layout";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 import { ProfileGate } from "./components/ProfileGate";
@@ -35,9 +41,23 @@ function ProfilePageWrapper() {
   );
 }
 
+function AnalyticsListener() {
+  const location = useLocation();
+  useEffect(() => {
+    absorbUtmsFromCurrentUrl();
+    trackLandingOnce();
+  }, []);
+  useEffect(() => {
+    absorbUtmsFromCurrentUrl();
+    trackPageView(location.pathname);
+  }, [location.pathname]);
+  return null;
+}
+
 export default function App() {
   return (
     <AuthProvider>
+      <AnalyticsListener />
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route path="/signup" element={<Signup />} />

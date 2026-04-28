@@ -78,3 +78,12 @@ def run_migrations():
                 conn.commit()
             except Exception:
                 conn.rollback()
+
+    # New tables on existing DBs (create_all also runs at startup; this is idempotent).
+    from sqlalchemy import inspect
+
+    from backend import models  # noqa: F401
+
+    inspector = inspect(engine)
+    if "portfolio_analytics_events" not in inspector.get_table_names():
+        models.PortfolioAnalyticsEvent.__table__.create(bind=engine)

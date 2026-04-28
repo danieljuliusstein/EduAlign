@@ -69,6 +69,26 @@ class UserActivity(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
 
+class PortfolioAnalyticsEvent(Base):
+    """First-party portfolio / marketing attribution events (UTM + session)."""
+
+    __tablename__ = "portfolio_analytics_events"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+    session_id = Column(String(128), nullable=False, index=True)
+    event_type = Column(String(64), nullable=False, index=True)
+    utm_source = Column(String(128), nullable=True)
+    utm_medium = Column(String(128), nullable=True)
+    utm_campaign = Column(String(256), nullable=True)
+    utm_content = Column(String(256), nullable=True)
+    utm_term = Column(String(256), nullable=True)
+    referrer = Column(Text, nullable=True)
+    path = Column(String(512), nullable=True)
+    metadata_ = Column(JSON, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
+
+
 class SavedCollege(Base):
     __tablename__ = "saved_colleges"
 

@@ -9,6 +9,9 @@ import {
   getAdminSignupsOverTime,
   getAdminMatchAnalytics,
   getAdminProfileInsights,
+  getAdminPortfolioSummary,
+  getAdminPortfolioTimeseries,
+  getAdminPortfolioBreakdown,
   toggleUserAdmin,
   deleteUser,
   type AuthUser,
@@ -17,6 +20,9 @@ import {
   type SignupDay,
   type MatchAnalytics,
   type ProfileInsights,
+  type AdminPortfolioSummary,
+  type AdminPortfolioTimeseries,
+  type AdminPortfolioBreakdown,
 } from "../api";
 
 // ── Constants ───────────────────────────────────────────────────────────────
@@ -27,7 +33,8 @@ type Section =
   | "match"
   | "financial"
   | "profile"
-  | "activity";
+  | "activity"
+  | "traffic";
 
 const SECTIONS: { key: Section; label: string }[] = [
   { key: "overview", label: "Overview" },
@@ -35,6 +42,7 @@ const SECTIONS: { key: Section; label: string }[] = [
   { key: "match", label: "Match Analytics" },
   { key: "financial", label: "Financial Analytics" },
   { key: "profile", label: "Profile Insights" },
+  { key: "traffic", label: "Traffic / Portfolio" },
   { key: "activity", label: "Activity Log" },
 ];
 
@@ -520,6 +528,12 @@ export function AdminPage() {
   const [activity, setActivity] = useState<ActivityRow[]>([]);
   const [profileInsights, setProfileInsights] =
     useState<ProfileInsights | null>(null);
+  const [portfolioSummary, setPortfolioSummary] =
+    useState<AdminPortfolioSummary | null>(null);
+  const [portfolioTimeseries, setPortfolioTimeseries] =
+    useState<AdminPortfolioTimeseries | null>(null);
+  const [portfolioBreakdown, setPortfolioBreakdown] =
+    useState<AdminPortfolioBreakdown | null>(null);
   const [loading, setLoading] = useState(true);
 
   // ── Users section filters ───────────────────────────────────────────────
@@ -570,6 +584,20 @@ export function AdminPage() {
           case "profile": {
             const p = await getAdminProfileInsights();
             if (!cancelled) setProfileInsights(p);
+            break;
+          }
+          case "traffic": {
+            const days = 30;
+            const [sum, ts, br] = await Promise.all([
+              getAdminPortfolioSummary(days),
+              getAdminPortfolioTimeseries(days),
+              getAdminPortfolioBreakdown(days),
+            ]);
+            if (!cancelled) {
+              setPortfolioSummary(sum);
+              setPortfolioTimeseries(ts);
+              setPortfolioBreakdown(br);
+            }
             break;
           }
         }
@@ -1130,6 +1158,205 @@ export function AdminPage() {
     );
   };
 
+  const renderPortfolioTraffic = () => {
+    if (!portfolioSummary || !portfolioTimeseries || !portfolioBreakdown) {
+      return (
+        <div className="adm-card">
+          <p className="adm-empty">No portfolio analytics data loaded.</p>
+        </div>
+      );
+    }
+
+    const sum = portfolioSummary;
+    const series = portfolioTimeseries.series ?? [];
+    const convPct =
+      sum.portfolio_sessions > 0
+        ? Math.round(sum.signup_per_portfolio_session * 10000) / 100
+        : 0;
+
+    const kpis: { label: string; value: string | number; sub: string }[] = [
+      {
+        label: "Portfolio sessions",
+        value: sum.portfolio_sessions,
+        sub: "Sessions with at least one UTM (attributed)",
+      },
+      {
+        label: "Unique visitors (sessions)",
+        value: sum.unique_sessions,
+        sub: "All analytics sessions in window",
+      },
+      {
+        label: "Unique users (portfolio)",
+        value: sum.unique_users_portfolio,
+        sub: "Logged-in users in portfolio sessions",
+      },
+      {
+        label: "Signups (portfolio)",
+        value: sum.signups_from_portfolio,
+        sub: "Completed signup in attributed session",
+      },
+      {
+        label: "Matches (portfolio)",
+        value: sum.matches_from_portfolio,
+        sub: "Match runs in attributed session",
+      },
+      {
+        label: "Signup / portfolio session",
+        value: `${convPct}%`,
+        sub: "Approx. conversion (signups ÷ portfolio sessions)",
+      },
+    ];
+
+    const dates = series.map((s) => s.date);
+    const hasSeries = series.some(
+      (s) =>
+        s.page_view +
+          s.signup_complete +
+          s.match_run +
+          s.landing +
+          s.login_success >
+        0
+    );
+
+    const utmRows = portfolioBreakdown.utm_source.filter((r) => r.count > 0);
+    const pathRows = portfolioBreakdown.path.filter((r) => r.count > 0);
+
+    return (
+      <>
+        <p
+          style={{
+            color: "#6b7280",
+            fontSize: "0.88rem",
+            marginTop: 0,
+            marginBottom: "1rem",
+          }}
+        >
+          First-party portfolio engagement (last {sum.days} days). Total events
+          recorded:{" "}
+          <strong style={{ color: "#4a5080" }}>{sum.total_events}</strong>.
+        </p>
+        <div className="adm-kpi-grid">
+          {kpis.map((k) => (
+            <div key={k.label} className="adm-kpi">
+              <span className="adm-kpi-label">{k.label}</span>
+              <span className="adm-kpi-value">{k.value}</span>
+              <span className="adm-kpi-sub">{k.sub}</span>
+            </div>
+          ))}
+        </div>
+
+        <div className="adm-card">
+          <h2 className="adm-card-h2">30-day activity: page views, signups &amp; matches</h2>
+          {hasSeries ? (
+            <Plot
+              data={[
+                {
+                  x: dates,
+                  y: series.map((s) => s.page_view),
+                  name: "Page views",
+                  type: "scatter",
+                  mode: "lines+markers",
+                  line: { color: CHART_PALETTE[0], width: 2 },
+                  marker: { size: 6 },
+                },
+                {
+                  x: dates,
+                  y: series.map((s) => s.signup_complete),
+                  name: "Signups",
+                  type: "scatter",
+                  mode: "lines+markers",
+                  line: { color: "#22c55e", width: 2 },
+                  marker: { size: 6 },
+                },
+                {
+                  x: dates,
+                  y: series.map((s) => s.match_run),
+                  name: "Matches",
+                  type: "scatter",
+                  mode: "lines+markers",
+                  line: { color: "#a78bfa", width: 2 },
+                  marker: { size: 6 },
+                },
+              ]}
+              layout={{
+                ...PLOTLY_LAYOUT_BASE,
+                xaxis: { title: "Date", gridcolor: "#f0f0f0" },
+                yaxis: { title: "Events", dtick: 1, gridcolor: "#f0f0f0" },
+                height: 320,
+                legend: { orientation: "h", y: -0.2 },
+              }}
+              config={PLOTLY_CONFIG}
+              style={{ width: "100%" }}
+            />
+          ) : (
+            <p className="adm-empty">
+              No events in this window yet. Open the app from a portfolio link with
+              UTM parameters, then refresh this tab.
+            </p>
+          )}
+        </div>
+
+        <div className="adm-card">
+          <h2 className="adm-card-h2">Top UTM sources</h2>
+          {utmRows.length > 0 ? (
+            <Plot
+              data={[
+                {
+                  y: utmRows.map((r) => r.key).reverse(),
+                  x: utmRows.map((r) => r.count).reverse(),
+                  type: "bar",
+                  orientation: "h",
+                  marker: {
+                    color: utmRows.map((_, i) => CHART_PALETTE[i % CHART_PALETTE.length]).reverse(),
+                  },
+                },
+              ]}
+              layout={{
+                ...PLOTLY_LAYOUT_BASE,
+                margin: { l: 140, r: 20, t: 10, b: 40 },
+                xaxis: { title: "Events", gridcolor: "#f0f0f0" },
+                height: Math.max(240, utmRows.length * 36),
+              }}
+              config={PLOTLY_CONFIG}
+              style={{ width: "100%" }}
+            />
+          ) : (
+            <p className="adm-empty">No UTM source data yet.</p>
+          )}
+        </div>
+
+        <div className="adm-card">
+          <h2 className="adm-card-h2">Top landing paths</h2>
+          {pathRows.length > 0 ? (
+            <Plot
+              data={[
+                {
+                  y: pathRows.map((r) => r.key).reverse(),
+                  x: pathRows.map((r) => r.count).reverse(),
+                  type: "bar",
+                  orientation: "h",
+                  marker: {
+                    color: pathRows.map((_, i) => CHART_PALETTE[(i + 1) % CHART_PALETTE.length]).reverse(),
+                  },
+                },
+              ]}
+              layout={{
+                ...PLOTLY_LAYOUT_BASE,
+                margin: { l: 120, r: 20, t: 10, b: 40 },
+                xaxis: { title: "Events", gridcolor: "#f0f0f0" },
+                height: Math.max(240, pathRows.length * 36),
+              }}
+              config={PLOTLY_CONFIG}
+              style={{ width: "100%" }}
+            />
+          ) : (
+            <p className="adm-empty">No path data yet.</p>
+          )}
+        </div>
+      </>
+    );
+  };
+
   const renderActivity = () => (
     <div className="adm-card">
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.5rem" }}>
@@ -1192,6 +1419,7 @@ export function AdminPage() {
     match: renderMatchAnalytics,
     financial: renderFinancial,
     profile: renderProfileInsights,
+    traffic: renderPortfolioTraffic,
     activity: renderActivity,
   };
 

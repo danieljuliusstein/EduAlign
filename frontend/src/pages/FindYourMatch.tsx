@@ -2,6 +2,7 @@ import React, { useState, useCallback, useEffect, useRef, useMemo } from "react"
 import { EXPERIENCE_DIMS, DIMENSION_LABELS } from "../constants";
 import type { Preferences, MatchItem, StudentProfile } from "../types";
 import { getProfileSliders, putProfileSliders, postMatch, postSuggestSliders } from "../api";
+import { trackEvent } from "../utils/analytics";
 import { CollegeCard } from "../components/CollegeCard";
 import { useAuth } from "../contexts/AuthContext";
 import { Crosshair, Search, Brain, Sparkles, Zap, WandSparkles, Check } from "lucide-react";
@@ -219,6 +220,10 @@ export function FindYourMatch() {
       });
       setMatches(res.matches ?? []);
       setUsedFallback(res.used_fallback ?? false);
+      trackEvent("match_run", {
+        used_fallback: res.used_fallback ?? false,
+        match_count: (res.matches ?? []).length,
+      });
 
       // Persist the slider preferences the user used for this match.
       // This keeps the experience radar consistent across sessions.

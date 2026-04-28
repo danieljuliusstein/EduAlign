@@ -48,6 +48,51 @@ async function fetchApi<T>(
   return res.json() as Promise<T>;
 }
 
+// ── Portfolio analytics (silent client; failures ignored) ─────────────────
+
+export type PortfolioAnalyticsEventType =
+  | "landing"
+  | "page_view"
+  | "signup_complete"
+  | "login_success"
+  | "match_run";
+
+export interface PortfolioAnalyticsEventPayload {
+  session_id: string;
+  event_type: PortfolioAnalyticsEventType;
+  utm_source?: string | null;
+  utm_medium?: string | null;
+  utm_campaign?: string | null;
+  utm_content?: string | null;
+  utm_term?: string | null;
+  referrer?: string | null;
+  path?: string | null;
+  metadata?: Record<string, unknown> | null;
+}
+
+/** Fire-and-forget; never throws (used from global listeners). */
+export async function postAnalyticsEvent(
+  payload: PortfolioAnalyticsEventPayload
+): Promise<void> {
+  try {
+    const token = getStoredToken();
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+    };
+    if (token) headers.Authorization = `Bearer ${token}`;
+    const res = await fetch(`${API_BASE}/api/analytics/event`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      /* ignore */
+    }
+  } catch {
+    /* ignore */
+  }
+}
+
 // ── Auth ───────────────────────────────────────────────────────────────────
 
 export interface AuthUser {
@@ -287,6 +332,57 @@ export async function deleteUser(userId: number) {
   return fetchApi<{ deleted: boolean; id: number }>(
     `/api/admin/users/${userId}`,
     { method: "DELETE" }
+  );
+}
+
+export interface AdminPortfolioSummary {
+  days: number;
+  total_events: number;
+  unique_sessions: number;
+  unique_users: number;
+  portfolio_sessions: number;
+  unique_users_portfolio: number;
+  signups_from_portfolio: number;
+  matches_from_portfolio: number;
+  signup_per_portfolio_session: number;
+}
+
+export interface AdminPortfolioTimeseriesDay {
+  date: string;
+  landing: number;
+  page_view: number;
+  signup_complete: number;
+  login_success: number;
+  match_run: number;
+}
+
+export interface AdminPortfolioTimeseries {
+  days: number;
+  series: AdminPortfolioTimeseriesDay[];
+}
+
+export interface AdminPortfolioBreakdown {
+  days: number;
+  utm_source: { key: string; count: number }[];
+  path: { key: string; count: number }[];
+  event_type: { key: string; count: number }[];
+}
+
+export async function getAdminPortfolioSummary(days = 30) {
+  return fetchApi<AdminPortfolioSummary>(
+    `/api/admin/portfolio-analytics/summary?days=${days}`
+  );
+}
+
+export async function getAdminPortfolioTimeseries(days = 30) {
+  return fetchApi<AdminPortfolioTimeseries>(
+    `/api/admin/portfolio-analytics/timeseries?days=${days}`
+  );
+}
+
+export async function getAdminPortfolioBreakdown(days = 30) {
+  return fetchApi<AdminPortfolioBreakdown>(
+    `/api/admin/portfolio-analytics/breakdown?days=${days}`
   );
 }
 

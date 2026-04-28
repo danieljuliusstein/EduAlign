@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { EduAlignLogo } from "../components/EduAlignLogo";
 import { postSignup } from "../api";
+import { trackEvent } from "../utils/analytics";
 import { useAuth } from "../contexts/AuthContext";
 import { validatePasswordComplexity } from "../utils/passwordValidation";
 import "../auth.css";
@@ -32,6 +33,7 @@ export function Signup() {
     try {
       const res = await postSignup(username.trim(), password, email.trim().toLowerCase());
       setAuth(res.access_token, res.user);
+      trackEvent("signup_complete");
       navigate("/", { replace: true });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Sign up failed");

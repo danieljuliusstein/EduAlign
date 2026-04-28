@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { EduAlignLogo } from "../components/EduAlignLogo";
 import { useAuth } from "../contexts/AuthContext";
 import { postLogin, postGoogleLogin } from "../api";
+import { trackEvent } from "../utils/analytics";
 import "../auth.css";
 
 declare global {
@@ -39,6 +40,7 @@ export function Login() {
     try {
       const res = await postLogin(username.trim(), password);
       setAuth(res.access_token, res.user);
+      trackEvent("login_success", { method: "password" });
       navigate("/", { replace: true });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Sign in failed");
@@ -53,6 +55,7 @@ export function Login() {
     try {
       const res = await postGoogleLogin(credential);
       setAuth(res.access_token, res.user);
+      trackEvent("login_success", { method: "google" });
       navigate("/", { replace: true });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Google sign-in failed");

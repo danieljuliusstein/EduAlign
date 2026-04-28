@@ -7,14 +7,14 @@ import math
 import os
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Any
 
 import pandas as pd
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 
@@ -46,7 +46,18 @@ from backend.auth import router as auth_router
 from backend.auth.routes import get_current_user, get_current_user_optional
 from backend.colleges import EXPERIENCE_DIMS, get_matches, get_predictions, suggest_sliders, load_merged_data
 from backend.database import get_db, init_db, run_migrations
-from backend.models import User, UserActivity, UserProfile, SavedCollege, SavedPlan, SavedComparison, Review, ReviewVote, REVIEW_TAGS
+from backend.models import (
+    User,
+    UserActivity,
+    UserProfile,
+    SavedCollege,
+    SavedPlan,
+    SavedComparison,
+    Review,
+    ReviewVote,
+    REVIEW_TAGS,
+    PortfolioAnalyticsEvent,
+)
 from backend.financials import (
     budget_tracker,
     estimate_semester_cost,
@@ -894,6 +905,301 @@ def api_home(
     }
 
 
+# ── Portfolio analytics (public ingest + admin read) ─────────────────────────
+
+ANALYTICS_EVENT_TYPES = frozenset(
+    {"landing", "page_view", "signup_complete", "login_success", "match_run"}
+)
+
+
+class AnalyticsEventRequest(BaseModel):
+    session_id: str = Field(..., min_length=4, max_length=128)
+    event_type: str = Field(..., min_length=1, max_length=64)
+    utm_source: Optional[str] = Field(None, max_length=128)
+    utm_medium: Optional[str] = Field(None, max_length=128)
+    utm_campaign: Optional[str] = Field(None, max_length=256)
+    utm_content: Optional[str] = Field(None, max_length=256)
+    utm_term: Optional[str] = Field(None, max_length=256)
+    referrer: Optional[str] = Field(None, max_length=2048)
+    path: Optional[str] = Field(None, max_length=512)
+    metadata: Optional[dict[str, Any]] = None
+
+
+def _analytics_trim_str(val: Optional[str], max_len: int) -> Optional[str]:
+    if val is None:
+        return None
+    s = val.strip()
+    if not s:
+        return None
+    return s[:max_len]
+
+
+def _analytics_trim_metadata(meta: Optional[dict]) -> Optional[dict]:
+    if not meta:
+        return None
+    try:
+        raw = json.dumps(meta)
+    except (TypeError, ValueError):
+        return None
+    if len(raw) > 8000:
+        return {"_truncated": True}
+    return meta
+
+
+@app.post("/api/analytics/event")
+def post_analytics_event(
+    body: AnalyticsEventRequest,
+    db: Session = Depends(get_db),
+    user: Optional[User] = Depends(get_current_user_optional),
+):
+    if body.event_type not in ANALYTICS_EVENT_TYPES:
+        raise HTTPException(400, "Invalid event_type")
+
+    row = PortfolioAnalyticsEvent(
+        user_id=user.id if user else None,
+        session_id=body.session_id.strip()[:128],
+        event_type=body.event_type.strip()[:64],
+        utm_source=_analytics_trim_str(body.utm_source, 128),
+        utm_medium=_analytics_trim_str(body.utm_medium, 128),
+        utm_campaign=_analytics_trim_str(body.utm_campaign, 256),
+        utm_content=_analytics_trim_str(body.utm_content, 256),
+        utm_term=_analytics_trim_str(body.utm_term, 256),
+        referrer=_analytics_trim_str(body.referrer, 2048),
+        path=_analytics_trim_str(body.path, 512),
+        metadata_=_analytics_trim_metadata(body.metadata),
+    )
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return {"ok": True, "id": row.id}
+
+
+def _analytics_utm_nonempty_clause():
+    from sqlalchemy import and_, or_
+
+    return or_(
+        and_(PortfolioAnalyticsEvent.utm_source.isnot(None), PortfolioAnalyticsEvent.utm_source != ""),
+        and_(PortfolioAnalyticsEvent.utm_medium.isnot(None), PortfolioAnalyticsEvent.utm_medium != ""),
+        and_(PortfolioAnalyticsEvent.utm_campaign.isnot(None), PortfolioAnalyticsEvent.utm_campaign != ""),
+        and_(PortfolioAnalyticsEvent.utm_content.isnot(None), PortfolioAnalyticsEvent.utm_content != ""),
+        and_(PortfolioAnalyticsEvent.utm_term.isnot(None), PortfolioAnalyticsEvent.utm_term != ""),
+    )
+
+
+def _analytics_clamp_days(days: int) -> int:
+    return max(1, min(int(days or 30), 366))
+
+
+def _require_admin(user: User):
+    if not user.is_admin:
+        raise HTTPException(401, "Admin access required")
+
+
+@app.get("/api/admin/portfolio-analytics/summary")
+def api_admin_portfolio_analytics_summary(
+    days: int = 30,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    from sqlalchemy import func as sa_func
+
+    _require_admin(user)
+    days = _analytics_clamp_days(days)
+    since = datetime.utcnow() - timedelta(days=days)
+    utm_nonempty = _analytics_utm_nonempty_clause()
+
+    total_events = (
+        db.query(sa_func.count(PortfolioAnalyticsEvent.id))
+        .filter(PortfolioAnalyticsEvent.created_at >= since)
+        .scalar()
+        or 0
+    )
+
+    unique_sessions = (
+        db.query(sa_func.count(sa_func.distinct(PortfolioAnalyticsEvent.session_id)))
+        .filter(PortfolioAnalyticsEvent.created_at >= since)
+        .scalar()
+        or 0
+    )
+
+    unique_users = (
+        db.query(sa_func.count(sa_func.distinct(PortfolioAnalyticsEvent.user_id)))
+        .filter(
+            PortfolioAnalyticsEvent.created_at >= since,
+            PortfolioAnalyticsEvent.user_id.isnot(None),
+        )
+        .scalar()
+        or 0
+    )
+
+    portfolio_session_list = [
+        r[0]
+        for r in (
+            db.query(PortfolioAnalyticsEvent.session_id)
+            .filter(PortfolioAnalyticsEvent.created_at >= since)
+            .filter(utm_nonempty)
+            .distinct()
+            .all()
+        )
+    ]
+    portfolio_sessions = len(portfolio_session_list)
+
+    if portfolio_session_list:
+        signups_portfolio = (
+            db.query(sa_func.count(PortfolioAnalyticsEvent.id))
+            .filter(
+                PortfolioAnalyticsEvent.created_at >= since,
+                PortfolioAnalyticsEvent.event_type == "signup_complete",
+                PortfolioAnalyticsEvent.session_id.in_(portfolio_session_list),
+            )
+            .scalar()
+            or 0
+        )
+        matches_portfolio = (
+            db.query(sa_func.count(PortfolioAnalyticsEvent.id))
+            .filter(
+                PortfolioAnalyticsEvent.created_at >= since,
+                PortfolioAnalyticsEvent.event_type == "match_run",
+                PortfolioAnalyticsEvent.session_id.in_(portfolio_session_list),
+            )
+            .scalar()
+            or 0
+        )
+        unique_users_portfolio = (
+            db.query(sa_func.count(sa_func.distinct(PortfolioAnalyticsEvent.user_id)))
+            .filter(
+                PortfolioAnalyticsEvent.created_at >= since,
+                PortfolioAnalyticsEvent.user_id.isnot(None),
+                PortfolioAnalyticsEvent.session_id.in_(portfolio_session_list),
+            )
+            .scalar()
+            or 0
+        )
+    else:
+        signups_portfolio = 0
+        matches_portfolio = 0
+        unique_users_portfolio = 0
+
+    conversion_rate = (
+        round(signups_portfolio / portfolio_sessions, 4) if portfolio_sessions else 0.0
+    )
+
+    return {
+        "days": days,
+        "total_events": total_events,
+        "unique_sessions": unique_sessions,
+        "unique_users": unique_users,
+        "portfolio_sessions": portfolio_sessions,
+        "unique_users_portfolio": unique_users_portfolio,
+        "signups_from_portfolio": signups_portfolio,
+        "matches_from_portfolio": matches_portfolio,
+        "signup_per_portfolio_session": conversion_rate,
+    }
+
+
+@app.get("/api/admin/portfolio-analytics/timeseries")
+def api_admin_portfolio_analytics_timeseries(
+    days: int = 30,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    from sqlalchemy import cast, Date, func as sa_func
+
+    _require_admin(user)
+    days = _analytics_clamp_days(days)
+    since = datetime.utcnow() - timedelta(days=days)
+    key_types = ("landing", "page_view", "signup_complete", "login_success", "match_run")
+
+    day_col = cast(PortfolioAnalyticsEvent.created_at, Date)
+    rows = (
+        db.query(
+            day_col.label("d"),
+            PortfolioAnalyticsEvent.event_type,
+            sa_func.count(PortfolioAnalyticsEvent.id).label("cnt"),
+        )
+        .filter(
+            PortfolioAnalyticsEvent.created_at >= since,
+            PortfolioAnalyticsEvent.event_type.in_(key_types),
+        )
+        .group_by(day_col, PortfolioAnalyticsEvent.event_type)
+        .order_by(day_col)
+        .all()
+    )
+
+    # Build complete date range
+    by_date: dict[str, dict[str, int]] = {}
+    for i in range(days):
+        d = (since.date() + timedelta(days=i)).isoformat()
+        by_date[d] = {k: 0 for k in key_types}
+
+    for r in rows:
+        ds = r.d.isoformat() if hasattr(r.d, "isoformat") else str(r.d)
+        if ds not in by_date:
+            by_date[ds] = {k: 0 for k in key_types}
+        if r.event_type in by_date[ds]:
+            by_date[ds][r.event_type] = int(r.cnt)
+
+    days_out = sorted(by_date.keys())
+    series = [{"date": d, **by_date[d]} for d in days_out]
+    return {"days": days, "series": series}
+
+
+@app.get("/api/admin/portfolio-analytics/breakdown")
+def api_admin_portfolio_analytics_breakdown(
+    days: int = 30,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    from sqlalchemy import func as sa_func
+
+    _require_admin(user)
+    days = _analytics_clamp_days(days)
+    since = datetime.utcnow() - timedelta(days=days)
+
+    utm_label = sa_func.coalesce(
+        sa_func.nullif(sa_func.trim(PortfolioAnalyticsEvent.utm_source), ""),
+        "(none)",
+    )
+    path_label = sa_func.coalesce(
+        sa_func.nullif(sa_func.trim(PortfolioAnalyticsEvent.path), ""),
+        "(none)",
+    )
+
+    utm_rows = (
+        db.query(utm_label.label("k"), sa_func.count(PortfolioAnalyticsEvent.id).label("cnt"))
+        .filter(PortfolioAnalyticsEvent.created_at >= since)
+        .group_by(utm_label)
+        .order_by(sa_func.count(PortfolioAnalyticsEvent.id).desc())
+        .limit(15)
+        .all()
+    )
+    path_rows = (
+        db.query(path_label.label("k"), sa_func.count(PortfolioAnalyticsEvent.id).label("cnt"))
+        .filter(PortfolioAnalyticsEvent.created_at >= since)
+        .group_by(path_label)
+        .order_by(sa_func.count(PortfolioAnalyticsEvent.id).desc())
+        .limit(15)
+        .all()
+    )
+    type_rows = (
+        db.query(
+            PortfolioAnalyticsEvent.event_type.label("k"),
+            sa_func.count(PortfolioAnalyticsEvent.id).label("cnt"),
+        )
+        .filter(PortfolioAnalyticsEvent.created_at >= since)
+        .group_by(PortfolioAnalyticsEvent.event_type)
+        .order_by(sa_func.count(PortfolioAnalyticsEvent.id).desc())
+        .all()
+    )
+
+    return {
+        "days": days,
+        "utm_source": [{"key": str(r.k), "count": int(r.cnt)} for r in utm_rows],
+        "path": [{"key": str(r.k), "count": int(r.cnt)} for r in path_rows],
+        "event_type": [{"key": str(r.k), "count": int(r.cnt)} for r in type_rows],
+    }
+
+
 # ── Admin ────────────────────────────────────────────────────────────────────
 
 
@@ -903,11 +1209,6 @@ def api_admin_dashboard(user: User = Depends(get_current_user), db: Session = De
         raise HTTPException(401, "Admin access required")
     users = db.query(User).all()
     return {"users": [u.to_dict() for u in users]}
-
-
-def _require_admin(user: User):
-    if not user.is_admin:
-        raise HTTPException(401, "Admin access required")
 
 
 @app.patch("/api/admin/users/{user_id}/toggle-admin")
@@ -937,6 +1238,7 @@ def api_delete_user(user_id: int, user: User = Depends(get_current_user), db: Se
     if not target:
         raise HTTPException(404, "User not found")
     db.query(UserActivity).filter(UserActivity.user_id == user_id).delete()
+    db.query(PortfolioAnalyticsEvent).filter(PortfolioAnalyticsEvent.user_id == user_id).delete()
     db.query(SavedCollege).filter(SavedCollege.user_id == user_id).delete()
     db.query(SavedPlan).filter(SavedPlan.user_id == user_id).delete()
     db.query(SavedComparison).filter(SavedComparison.user_id == user_id).delete()
